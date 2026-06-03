@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>轻快跑酷 | 畅爽跳跃冒险</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            background: linear-gradient(145deg, #0a2f3a 0%, #0a1f2a 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', 'Poppins', 'Courier New', monospace;
+            touch-action: manipulation;
+        }
+
+        .game-container {
+            background: #1e3b3f;
+            border-radius: 48px;
+            padding: 20px 25px 25px 25px;
+            box-shadow: 0 25px 40px rgba(0,0,0,0.5), inset 0 1px 2px rgba(255,255,255,0.1);
+        }
+
+        canvas {
+            display: block;
+            margin: 0 auto;
+            border-radius: 24px;
+            box-shadow: 0 12px 28px black;
+            cursor: pointer;
+            background-color: #8bc6d5;
+        }
+
+        .info-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-top: 18px;
+            margin-bottom: 6px;
+            padding: 0 12px;
+            color: #f7ecc7;
+            text-shadow: 2px 2px 0 #1f4e3c;
+        }
+
+        .score-box, .best-box {
+            background: #2c2c2cbb;
+            backdrop-filter: blur(4px);
+            padding: 6px 20px;
+            border-radius: 60px;
+            font-weight: bold;
+            font-size: 1.8rem;
+            letter-spacing: 2px;
+            font-family: monospace;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.3), 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .score-box span, .best-box span {
+            font-size: 0.9rem;
+            font-weight: normal;
+            margin-right: 8px;
+            color: #ffec9e;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 28px;
+            margin-top: 20px;
+        }
+
+        button {
+            background: #2e1e0e;
+            border: none;
+            font-size: 1.8rem;
+            font-weight: bold;
+            font-family: inherit;
+            color: #fadfaa;
+            padding: 10px 28px;
+            border-radius: 60px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #5a3e24;
+            transition: 0.07s linear;
+            touch-action: manipulation;
+        }
+
+        button:active {
+            transform: translateY(3px);
+            box-shadow: 0 3px 0 #5a3e24;
+        }
+
+        .restart-btn {
+            background: #422c13;
+            font-size: 1.3rem;
+            padding: 8px 24px;
+        }
+
+        .status {
+            font-size: 1.1rem;
+            background: #000000aa;
+            backdrop-filter: blur(4px);
+            padding: 5px 14px;
+            border-radius: 30px;
+            display: inline-block;
+            margin-left: 20px;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        @media (max-width: 780px) {
+            .game-container {
+                padding: 12px 16px 20px;
+            }
+            .score-box, .best-box {
+                font-size: 1.3rem;
+                padding: 3px 14px;
+            }
+            button {
+                font-size: 1.3rem;
+                padding: 6px 20px;
+            }
+            .info-panel {
+                margin-top: 12px;
+            }
+        }
+        @media (max-width: 550px) {
+            canvas {
+                width: 100%;
+                height: auto;
+            }
+            .controls {
+                gap: 16px;
+            }
+        }
+        .instruction {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 0.8rem;
+            color: #bfd9bf;
+            background: #1a2f28aa;
+            width: fit-content;
+            margin-left: auto;
+            margin-right: auto;
+            padding: 4px 16px;
+            border-radius: 60px;
+        }
+    </style>
+</head>
+<body>
+<div>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="900" height="400"></canvas>
+        <div class="info-panel">
+            <div class="score-box"><span>🏆 得分</span> <span id="scoreValue">0</span></div>
+            <div class="best-box"><span>⭐ 最高分</span> <span id="bestValue">0</span></div>
+            <div class="status" id="gameStatusText">🏃‍♂️ 奔跑中</div>
+        </div>
+        <div class="controls">
+            <button id="jumpBtn">⬆️ 跳跃</button>
+            <button id="restartBtn" class="restart-btn">🔄 重来</button>
+        </div>
+        <div class="instruction">
+            🖱️ 点击【跳跃】或按【空格 / 上箭头】跳跃 | 躲避方块障碍物并收集金色星星✨ (改良手感，跳跃更轻松)
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        // ---------- CANVAS ----------
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 固定尺寸
+        const CANVAS_W = 900;
+        const CANVAS_H = 400;
+        canvas.width = CANVAS_W;
+        canvas.height = CANVAS_H;
+
+        // ---------- 游戏状态 ----------
+        let gameRunning = true;
+        let score = 0;
+        let bestScore = localStorage.getItem('parkourBestEasy') ? parseInt(localStorage.getItem('parkourBestEasy')) : 0;
+        document.getElementById('bestValue').innerText = bestScore;
+
+        // ========= 玩家属性 - 优化重力 & 跳跃手感 =========
+        const PLAYER_WIDTH = 32;
+        const PLAYER_HEIGHT = 38;
+        let player = {
+            x: 70,
+            y: 0,
+            width: PLAYER_WIDTH,
+            height: PLAYER_HEIGHT,
+            vy: 0,
+            isOnGround: true,
+            jumpPower: -10.5      // 更强的初始弹跳 (原-9.5 -> -10.5)
+        };
+        
+        // 地面高度
+        const GROUND_Y = CANVAS_H - 48;
+        // 调整重力系数: 从 0.68 降低到 0.48，角色下落更慢，跳跃弧线更高更舒服
+        const GRAVITY = 0.48;
+        
+        player.y = GROUND_Y - PLAYER_HEIGHT;
+        
+        // ---------- 障碍物 & 星星 ----------
+        let obstacles = [];
+        let stars = [];
+        
+        const OBSTACLE_WIDTH = 26;
+        const OBSTACLE_HEIGHT = 32;
+        const STAR_SIZE = 18;
+        
+        let frameCounter = 0;
+        let obstacleSpawnDelay = 0;
+        let starSpawnDelay = 0;
+        
+        // 基础速度 (略微调低起步速度，给玩家适应时间)
+        let baseSpeed = 4.8;
+        let currentSpeed = baseSpeed;
+        const MAX_SPEED = 10.5;    // 最高速度略微降低，不会快到反应不过来
+        
+        // 辅助函数
+        function updateBestScoreUI(){
+            document.getElementById('bestValue').innerText = bestScore;
+            if(score > bestScore){
+                bestScore = Math.floor(score);
+                localStorage.setItem('parkourBestEasy', bestScore);
+                document.getElementById('bestValue').innerText = bestScore;
+            }
+        }
+        
+        function addScore(inc){
+            if(!gameRunning) return;
+            score += inc;
+            document.getElementById('scoreValue').innerText = Math.floor(score);
+            updateBestScoreUI();
+            // 速度随分数平滑增加，每25分增加0.2速 (比原来更缓)
+            let speedBonus = Math.floor(score / 25) * 0.2;
+            currentSpeed = Math.min(baseSpeed + speedBonus, MAX_SPEED);
+        }
+        
+        // 重置游戏
+        function restartGame(){
+            gameRunning = true;
+            score = 0;
+            currentSpeed = baseSpeed;
+            document.getElementById('scoreValue').innerText = "0";
+            document.getElementById('gameStatusText').innerHTML = "🏃‍♂️ 奔跑中";
+            document.getElementById('gameStatusText').style.color = "#f7ecc7";
+            obstacles = [];
+            stars = [];
+            player.vy = 0;
+            player.y = GROUND_Y - PLAYER_HEIGHT;
+            player.isOnGround = true;
+            frameCounter = 0;
+            obstacleSpawnDelay = 15;   // 开局安全时间更长
+            starSpawnDelay = 8;
+            // 开局生成两个星星鼓励收集
+            for(let i=0;i<2;i++) spawnStarIfNeeded(true);
+        }
+        
+        // 生成障碍物 (增加间距控制，避免连续致死)
+        function spawnObstacle(){
+            if(!gameRunning) return;
+            obstacles.push({
+                x: CANVAS_W,
+                width: OBSTACLE_WIDTH,
+                height: OBSTACLE_HEIGHT,
+                color: '#5a3d2b'
+            });
+        }
+        
+        function spawnStarIfNeeded(force=false){
+            if(!gameRunning && !force) return;
+            if(stars.length > 5 && !force) return;
+            stars.push({
+                x: CANVAS_W,
+                width: STAR_SIZE,
+                height: STAR_SIZE,
+                collected: false,
+            });
+        }
+        
+        // 更新逻辑: 物理、移动、碰撞 (优化碰撞宽容度)
+        function updateGame(){
+            if(!gameRunning) return;
+            
+            // ***** 跳跃物理 (低重力，高弧线) *****
+            player.vy += GRAVITY;
+            player.y += player.vy;
+            
+            // 地面碰撞
+            if(player.y >= GROUND_Y - PLAYER_HEIGHT){
+                player.y = GROUND_Y - PLAYER_HEIGHT;
+                player.vy = 0;
+                player.isOnGround = true;
+            } else {
+                player.isOnGround = false;
+            }
+            
+            // 天花板限制 (防止飞出)
+            if(player.y < 0){
+                player.y = 0;
+                if(player.vy < 0) player.vy = 0;
+            }
+            
+            // 2. 移动障碍物 + 碰撞检测 (更加宽容的碰撞箱)
+            for(let i=0; i<obstacles.length; i++){
+                const obs = obstacles[i];
+                obs.x -= currentSpeed;
+                
+                if(!gameRunning) break;
+                // 玩家碰撞箱缩小（更宽容），障碍物碰撞箱微调
+                const playerRect = {
+                    x: player.x + 6,      // 左右缩小碰撞范围
+                    y: player.y + 5,
+                    w: PLAYER_WIDTH - 12,
+                    h: PLAYER_HEIGHT - 10
+                };
+                const obsRect = {
+                    x: obs.x + 4,
+                    y: GROUND_Y - OBSTACLE_HEIGHT + 4,
+                    w: OBSTACLE_WIDTH - 8,
+                    h: OBSTACLE_HEIGHT - 8
+                };
+                if(playerRect.x < obsRect.x + obsRect.w &&
+                    playerRect.x + playerRect.w > obsRect.x &&
+                    playerRect.y < obsRect.y + obsRect.h &&
+                    playerRect.y + playerRect.h > obsRect.y){
+                    gameRunning = false;
+                    document.getElementById('gameStatusText').innerHTML = "💀 游戏结束 💀";
+                    document.getElementById('gameStatusText').style.color = "#ffb347";
+                    break;
+                }
+            }
+            // 移除出界的障碍物
+            obstacles = obstacles.filter(obs => obs.x + OBSTACLE_WIDTH > 0);
+            
+            // 3. 星星移动 + 收集判定 (同样更宽容)
+            for(let i=0; i<stars.length; i++){
+                const star = stars[i];
+                if(star.collected) continue;
+                star.x -= currentSpeed;
+                
+                const starRect = {
+                    x: star.x + 3,
+                    y: GROUND_Y - STAR_SIZE - 3,
+                    w: STAR_SIZE - 6,
+                    h: STAR_SIZE - 6
+                };
+                const playerCollectRect = {
+                    x: player.x + 8,
+                    y: player.y + 8,
+                    w: PLAYER_WIDTH - 16,
+                    h: PLAYER_HEIGHT - 14
+                };
+                if(!star.collected && 
+                    playerCollectRect.x < starRect.x + starRect.w &&
+                    playerCollectRect.x + playerCollectRect.w > starRect.x &&
+                    playerCollectRect.y < starRect.y + starRect.h &&
+                    playerCollectRect.y + playerCollectRect.h > starRect.y){
+                    star.collected = true;
+                    addScore(10);
+                }
+            }
+            stars = stars.filter(star => (star.x + STAR_SIZE > 0) && !star.collected);
+            
+            // 4. 生成控制 (降低障碍物密度，增加反应时间)
+            if(gameRunning){
+                // 障碍物生成间隔增大，避免连续多个障碍物
+                if(obstacleSpawnDelay <= 0){
+                    // 避免叠罗汉: 检查最后一个障碍物离屏幕右侧的距离
+                    let lastObsX = obstacles.length > 0 ? Math.max(...obstacles.map(o=>o.x)) : -300;
+                    if(lastObsX < CANVAS_W - 200){   // 间距增大至200px以上
+                        spawnObstacle();
+                        // 更宽松的生成延迟: 基础55~80帧，比之前宽松很多
+                        obstacleSpawnDelay = Math.floor(58 + Math.random() * 40 - (currentSpeed - baseSpeed) * 0.8);
+                        if(obstacleSpawnDelay < 36) obstacleSpawnDelay = 36;   // 最小冷却36帧，约0.6秒
+                    } else {
+                        obstacleSpawnDelay = 18;
+                    }
+                } else {
+                    obstacleSpawnDelay--;
+                }
+                
+                // 星星生成更频繁但不会过分，提供正反馈
+                if(starSpawnDelay <= 0){
+                    if(stars.length < 5){
+                        spawnStarIfNeeded();
+                        starSpawnDelay = Math.floor(32 + Math.random() * 32);
+                    }else{
+                        starSpawnDelay = 20;
+                    }
+                } else {
+                    starSpawnDelay--;
+                }
+            }
+            
+            // 生存分数 (略微提高生存分增益，让玩家即使不捡星也有成长感)
+            if(gameRunning){
+                let surviveScore = 0.08;
+                score += surviveScore;
+                document.getElementById('scoreValue').innerText = Math.floor(score);
+                updateBestScoreUI();
+                let speedBonus = Math.floor(score / 25) * 0.2;
+                currentSpeed = Math.min(baseSpeed + speedBonus, MAX_SPEED);
+            }
+        }
+        
+        // ---------- 精致绘图模块 (更生动) ----------
+        function drawBackground(){
+            const grad = ctx.createLinearGradient(0,0,0,CANVAS_H);
+            grad.addColorStop(0,"#c0e0ff");
+            grad.addColorStop(0.7,"#f2e6c9");
+            ctx.fillStyle = grad;
+            ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
+            // 云朵
+            ctx.fillStyle = "#ffffffc0";
+            ctx.shadowBlur = 0;
+            ctx.beginPath();
+            ctx.ellipse(140 + frameCounter*0.15 % 900, 60, 40, 30, 0, 0, Math.PI*2);
+            ctx.ellipse(180 + frameCounter*0.15 % 900, 45, 45, 35, 0, 0, Math.PI*2);
+            ctx.ellipse(220 + frameCounter*0.15 % 900, 65, 35, 28, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(640 - frameCounter*0.1 % 600, 90, 50, 35, 0, 0, Math.PI*2);
+            ctx.ellipse(690 - frameCounter*0.1 % 600, 80, 38, 30, 0, 0, Math.PI*2);
+            ctx.fill();
+            // 远山
+            ctx.fillStyle = "#b0aa7e80";
+            ctx.beginPath();
+            ctx.moveTo(0, GROUND_Y-35);
+            ctx.lineTo(120, GROUND_Y-65);
+            ctx.lineTo(280, GROUND_Y-40);
+            ctx.lineTo(410, GROUND_Y-70);
+            ctx.lineTo(580, GROUND_Y-45);
+            ctx.lineTo(760, GROUND_Y-68);
+            ctx.lineTo(900, GROUND_Y-40);
+            ctx.lineTo(900, GROUND_Y);
+            ctx.lineTo(0, GROUND_Y);
+            ctx.fill();
+        }
+        
+        function drawGround(){
+            ctx.fillStyle = "#6f4c2e";
+            ctx.fillRect(0, GROUND_Y, CANVAS_W, CANVAS_H-GROUND_Y+5);
+            ctx.fillStyle = "#d9a13b";
+            for(let i=0; i<15; i++){
+                let x = (frameCounter*0.7 + i*65) % CANVAS_W;
+                ctx.fillRect(x, GROUND_Y-6, 12, 8);
+            }
+            ctx.fillStyle = "#8b6946";
+            ctx.fillRect(0, GROUND_Y+2, CANVAS_W, 6);
+            ctx.fillStyle = "#548235";
+            for(let i=0;i<12;i++){
+                let xi = (frameCounter + i*70) % CANVAS_W;
+                ctx.beginPath();
+                ctx.moveTo(xi, GROUND_Y-4);
+                ctx.lineTo(xi+5, GROUND_Y-12);
+                ctx.lineTo(xi-5, GROUND_Y-12);
+                ctx.fill();
+            }
+        }
+        
+        function drawObstacle(obs){
+            const x = obs.x;
+            const y = GROUND_Y - OBSTACLE_HEIGHT;
+            ctx.fillStyle = obs.color;
+            ctx.shadowBlur = 4;
+            ctx.shadowColor = "#2b1a0c";
+            ctx.fillRect(x, y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT);
+            ctx.fillStyle = "#2d2b1f";
+            ctx.fillRect(x+4, y+6, OBSTACLE_WIDTH-8, 6);
+            ctx.fillRect(x+8, y+18, 6, 10);
+            ctx.fillStyle = "#876b44";
+            ctx.fillRect(x+16, y+22, 5, 8);
+            ctx.shadowBlur = 0;
+        }
+        
+        function drawStar(star){
+            const x = star.x;
+            const y = GROUND_Y - STAR_SIZE - 5;
+            let pulse = (Math.sin(Date.now() * 0.008 + star.x) * 0.25 + 0.75);
+            ctx.save();
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#ffcd7e";
+            ctx.fillStyle = `rgba(255, 215, 70, ${0.8+pulse*0.2})`;
+            let cx = x + STAR_SIZE/2;
+            let cy = y + STAR_SIZE/2;
+            let outerR = STAR_SIZE/1.8;
+            let innerR = STAR_SIZE/3.5;
+            let points = 5;
+            let angle = Math.PI / points;
+            ctx.beginPath();
+            for(let i = 0; i < points * 2; i++){
+                let r = (i % 2 === 0) ? outerR : innerR;
+                let ang = i * angle - Math.PI/2;
+                let xp = cx + r * Math.cos(ang);
+                let yp = cy + r * Math.sin(ang);
+                if(i===0) ctx.moveTo(xp, yp);
+                else ctx.lineTo(xp, yp);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = "#ffaa33";
+            ctx.font = `${STAR_SIZE-4}px monospace`;
+            ctx.fillText("⭐", cx-7, cy+5);
+            ctx.restore();
+        }
+        
+        function drawPlayer(){
+            let px = player.x;
+            let py = player.y;
+            // 影子
+            ctx.fillStyle = "#443a2eaa";
+            ctx.beginPath();
+            ctx.ellipse(px+PLAYER_WIDTH/2, GROUND_Y-5, 14, 6, 0, 0, Math.PI*2);
+            ctx.fill();
+            // 动态跳跃拉伸 (增加活力)
+            let bodyOffsetY = 0;
+            if(!player.isOnGround){
+                bodyOffsetY = -2;
+            }
+            ctx.fillStyle = "#2f6b7f";
+            ctx.shadowBlur = 4;
+            ctx.fillRect(px+6, py+6, 22, 28);
+            ctx.fillStyle = "#ffb347";
+            ctx.fillRect(px+4, py+4, 8, 10);
+            ctx.fillRect(px+20, py+4, 8, 10);
+            ctx.fillStyle = "#c94f2b";
+            ctx.fillRect(px+6, py-2, 22, 10);
+            ctx.fillStyle = "#1f2e2a";
+            ctx.fillRect(px+10, py+12, 14, 16);
+            ctx.fillStyle = "white";
+            ctx.fillRect(px+10, py+12, 6, 6);
+            ctx.fillRect(px+20, py+12, 6, 6);
+            ctx.fillStyle = "#000";
+            ctx.fillRect(px+12, py+14, 3, 3);
+            ctx.fillRect(px+22, py+14, 3, 3);
+            ctx.fillStyle = "#e34234";
+            ctx.fillRect(px+14, py+22, 8, 12);
+            let legSwing = Math.sin(Date.now() * 0.018) * 5;
+            ctx.fillStyle = "#2c5a6e";
+            ctx.fillRect(px+8, py+30, 7, 12);
+            ctx.fillRect(px+18, py+30, 7, 12);
+            ctx.fillStyle = "#222";
+            ctx.fillRect(px+8+ (player.isOnGround ? legSwing*0.5 : 0), py+38, 6, 6);
+            ctx.fillRect(px+18- (player.isOnGround ? legSwing*0.5 : 0), py+38, 6, 6);
+            ctx.shadowBlur = 0;
+        }
+        
+        function drawParticles(){
+            if(currentSpeed > 6.5 && gameRunning && frameCounter % 2 === 0){
+                ctx.fillStyle = "#ffe3a0aa";
+                ctx.beginPath();
+                ctx.arc(player.x-6, GROUND_Y-12, 3, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = "#ffb673aa";
+                ctx.beginPath();
+                ctx.arc(player.x-14, GROUND_Y-18, 2, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+        
+        function drawScoreEffect(){
+            if(!gameRunning){
+                ctx.font = "bold 36px monospace";
+                ctx.fillStyle = "#ffd966";
+                ctx.shadowBlur = 0;
+                ctx.fillText("GAME OVER", CANVAS_W/2-115, 70);
+                ctx.font = "18px monospace";
+                ctx.fillStyle = "#f5f0ca";
+                ctx.fillText("点击「重来」继续奔跑", CANVAS_W/2-120, 130);
+            }
+        }
+        
+        function render(){
+            ctx.clearRect(0,0,CANVAS_W,CANVAS_H);
+            drawBackground();
+            drawGround();
+            for(let star of stars) drawStar(star);
+            for(let obs of obstacles) drawObstacle(obs);
+            drawPlayer();
+            drawParticles();
+            drawScoreEffect();
+            ctx.font = "bold 14px monospace";
+            ctx.fillStyle = "#203d3b";
+            ctx.fillText(`⚡ 速度: ${currentSpeed.toFixed(1)}`, CANVAS_W-90, 32);
+            ctx.fillStyle = "#fffad0";
+            ctx.fillText(`🏅 ${Math.floor(score)} 分`, 20, 42);
+            // 额外提示跳跃手感
+            ctx.font = "italic 12px monospace";
+            ctx.fillStyle = "#faebd2";
+            ctx.fillText("✨ 轻快跳跃·手感优化 ✨", CANVAS_W-155, 70);
+        }
+        
+        // 跳跃功能
+        function jumpAction(){
+            if(!gameRunning) return;
+            if(player.isOnGround){
+                player.vy = player.jumpPower;
+                player.isOnGround = false;
+                // 增加一点跳跃声效感 (仅视觉)
+            }
+        }
+        
+        // 事件绑定
+        const jumpBtn = document.getElementById('jumpBtn');
+        const restartBtn = document.getElementById('restartBtn');
+        
+        jumpBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            jumpAction();
+        });
+        restartBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            restartGame();
+        });
+        
+        window.addEventListener('keydown', (e) => {
+            if(e.code === 'Space' || e.code === 'ArrowUp'){
+                e.preventDefault();
+                jumpAction();
+            }
+            if(e.code === 'KeyR'){
+                e.preventDefault();
+                restartGame();
+            }
+        });
+        
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            jumpAction();
+        });
+        canvas.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            jumpAction();
+        });
+        
+        restartGame();
+        
+        function gameLoop(){
+            updateGame();
+            render();
+            frameCounter++;
+            requestAnimationFrame(gameLoop);
+        }
+        gameLoop();
+    })();
+</script>
+</body>
+</html>
